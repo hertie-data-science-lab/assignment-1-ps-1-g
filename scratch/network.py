@@ -164,4 +164,3 @@ if __name__ == "__main__":
     X = np.random.randn(5, 784)  # dummy batch of 5 images
     out, _ = net._forward_pass(X)
     print("Forward output shape:", out.shape)
-
