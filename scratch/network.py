@@ -82,7 +82,7 @@ class Network():
         z1,z2,z3= output["z1"], output["z2"], output["z3"]
 
         #Output layer
-        dz3=(a3-y_train.T)*self.output_func_deriv
+        dz3=(a3-y_train.T)*self.output_func_deriv(z3)
         dW3=(1/m)*np.dot(dz3,a2.T)
 
         #Hidden Layer 2
@@ -102,7 +102,7 @@ class Network():
         TODO: Update the network weights according to stochastic gradient descent.
         '''
         for l in [1,2,3]:
-            self.params[f'W{l}'] -= self.learning_rate * grads[f'dW{l}']
+            self.params[f'W{l}'] -= learning_rate * weights_gradient[f'dW{l}']
 
 
     def _print_learning_progress(self, start_time, iteration, x_train, y_train, x_val, y_val):
@@ -141,12 +141,14 @@ class Network():
 
         for iteration in range(self.epochs):
             for x, y in zip(x_train, y_train):
+                x=x.reshape(1,-1)
+                y=y.reshape(1,-1)
                 
                 if cosine_annealing_lr:
                     learning_rate = cosine_annealing(self.learning_rate, 
                                                      iteration, 
-                                                     len(x_train), 
-                                                     self.learning_rate)
+                                                     self.epochs, 
+                                                     min_lr=0)
                 else: 
                     learning_rate = self.learning_rate
                 output = self._forward_pass(x)
