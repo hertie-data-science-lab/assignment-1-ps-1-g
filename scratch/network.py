@@ -151,18 +151,9 @@ class Network():
                                                      min_lr=0)
                 else: 
                     learning_rate = self.learning_rate
-                output = self._forward_pass(x)
+                a3, output = self._forward_pass(x)
                 weights_gradient = self._backward_pass(y, output)
                 
                 self._update_weights(weights_gradient, learning_rate=learning_rate)
 
             self._print_learning_progress(start_time, iteration, x_train, y_train, x_val, y_val)
-
-if __name__ == "__main__":
-    from scratch.network import Network
-    import numpy as np
-
-    net = Network([784, 128, 64, 10])
-    X = np.random.randn(5, 784)  # dummy batch of 5 images
-    out, _ = net._forward_pass(X)
-    print("Forward output shape:", out.shape)
