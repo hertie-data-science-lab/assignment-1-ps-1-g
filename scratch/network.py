@@ -19,6 +19,9 @@ class Network():
         self.cost_func_deriv = utils.mse_deriv
 
         self.params = self._initialize_weights()
+        
+        self.train_accuracies = []
+        self.val_accuracies = []
 
 
     def _initialize_weights(self):
@@ -40,61 +43,54 @@ class Network():
 
 
     def _forward_pass(self, x_train):
-        '''
-        TODO: Implement the forward propagation algorithm.
-
-        The method should return the output of the network.
-        '''
-        params=self.params
+        X = np.asarray(x_train, dtype=float)
+        if X.ndim == 1:  # single sample
+            X = X.reshape(1, -1)
+            
+        W1, W2, W3 = self.params['W1'], self.params['W2'], self.params['W3']
 
         # Layer 1
-        z1=np.dot(params['W1'], x_train.T)
-        a1=self.activation_func(z1)
+        Z1 = X @ W1.T
+        A1 = self.activation_func(Z1)
 
         # Layer 2
-        z2=np.dot(params['W2'], a1)
-        a2=self.activation_func(z2)
+        Z2 = A1 @ W2.T
+        A2 = self.activation_func(Z2)
 
-        #Layer 3
-        z3=np.dot(params['W3'], a2)
-        a3=self.output_func(z3)
+        # Layer 3
+        Z3 = A2 @ W3.T
+        Z3 -= np.max(Z3, axis=1, keepdims=True)  # stability
+        A3 = self.output_func(Z3.T).T  # softmax outputs
 
-        #Final output
-        output={"x":x_train,
-                "z1": z1, "a1":a1,
-                "z2": z2, "a2":a2,
-                "z3":z3, "a3":a3}
-        return a3, output
+        self.cache = {"X": X, "A1": A1, "A2": A2, "Z1": Z1, "Z2": Z2, "Z3": Z3, "A3": A3}
+
+        return A3
 
 
     def _backward_pass(self, y_train, output):
-        '''
-        TODO: Implement the backpropagation algorithm responsible for updating the weights of the neural network.
+        Y = np.asarray(y_train, dtype=float)
+        if Y.ndim == 1: Y = Y.reshape(1, -1)
 
-        The method should return a dictionary of the weight gradients which are used to update the weights in self._update_weights().
+        X, A1, A2 = self.cache["X"], self.cache["A1"], self.cache["A2"]
+        W2, W3 = self.params['W2'], self.params['W3']
+        N = X.shape[0]
 
-        '''
-        m=y_train.shape[0]
-        params=self.params
+        S = output # softmax outputs
+        # Output gradient (MSE + softmax)
+        dL_ds = (S - Y) / N
+        SV = S * dL_ds
+        s_dot_v = np.sum(SV, axis=1, keepdims=True)
+        G3 = SV - S * s_dot_v
 
-        x_train=output["x"]
-        a1,a2,a3=output["a1"], output["a2"], output["a3"]
-        z1,z2= output["z1"], output["z2"]
+        # Backprop hidden layers
+        G2 = (G3 @ W3) * (A2 * (1 - A2))
+        G1 = (G2 @ W2) * (A1 * (1 - A1))
 
-        #Output layer
-        dz3=(a3-y_train.T)
-        dW3=(1/m)*np.dot(dz3,a2.T)
-
-        #Hidden Layer 2
-        dz2=np.dot(params['W3'].T, dz3)* self.activation_func_deriv(z2)
-        dW2 = (1/m) * np.dot(dz2, a1.T)
-
-        # Hidden layer 1
-        dz1 = np.dot(params['W2'].T, dz2) * self.activation_func_deriv(z1)
-        dW1 = (1/m) * np.dot(dz1, x_train)
-        
-        weights_gradient = {"dW1": dW1, "dW2": dW2, "dW3": dW3}
-        return weights_gradient
+        return {
+            "dW3": G3.T @ A2,
+            "dW2": G2.T @ A1,
+            "dW1": G1.T @ X
+        }
 
     def _update_weights(self, weights_gradient, learning_rate):
         '''
@@ -116,43 +112,57 @@ class Network():
 
 
     def compute_accuracy(self, x_val, y_val):
-        predictions = []
-        for x, y in zip(x_val, y_val):
-            pred = self.predict(x)
-            predictions.append(pred == np.argmax(y))
-
-        return np.mean(predictions)
-
+        preds = self.predict(x_val)
+        if preds.ndim == 0:  # single sample
+            return float(preds == np.argmax(y_val))
+        return np.mean(preds == np.argmax(y_val, axis=1))
 
     def predict(self, x):
         '''
         TODO: Implement the prediction making of the network.
         The method should return the index of the most likeliest output class.
         '''
-        a3, _=self._forward_pass(x)
-        return np.argmax(a3, axis=0)
+        probs = self._forward_pass(x)
+        return np.argmax(probs, axis=1) if probs.ndim == 2 else int(np.argmax(probs))
 
+    
 
-
-    def fit(self, x_train, y_train, x_val, y_val, cosine_annealing_lr=False):
-
+    def fit(self, x_train, y_train, x_val, y_val, cosine_annealing_lr=False, batch_size=32):
         start_time = time.time()
+        num_samples = x_train.shape[0]
+        total_steps = (num_samples // batch_size) * self.epochs
 
-        for iteration in range(self.epochs):
-            for x, y in zip(x_train, y_train):
-                x=x.reshape(1,-1)
-                y=y.reshape(1,-1)
-                
+        for epoch in range(self.epochs):
+            # shuffle training data each epoch
+            indices = np.arange(num_samples)
+            np.random.shuffle(indices)
+            x_train, y_train = x_train[indices], y_train[indices]
+
+            for step in range(0, num_samples, batch_size):
+                xb = x_train[step:step+batch_size]
+                yb = y_train[step:step+batch_size]
+
+                # learning rate scheduler
                 if cosine_annealing_lr:
-                    learning_rate = cosine_annealing(self.learning_rate, 
-                                                     iteration, 
-                                                     self.epochs, 
-                                                     min_lr=0)
-                else: 
-                    learning_rate = self.learning_rate
-                a3, output = self._forward_pass(x)
-                weights_gradient = self._backward_pass(y, output)
-                
-                self._update_weights(weights_gradient, learning_rate=learning_rate)
+                    global_step = epoch * (num_samples // batch_size) + (step // batch_size)
+                    lr = cosine_annealing(self.learning_rate,
+                                        global_step,
+                                        total_steps,
+                                        min_lr=0.0)
+                else:
+                    lr = self.learning_rate
 
-            self._print_learning_progress(start_time, iteration, x_train, y_train, x_val, y_val)
+                # forward + backward + update
+                output = self._forward_pass(xb)
+                grads = self._backward_pass(yb, output)
+                self._update_weights(grads, lr)
+
+            train_acc = self.compute_accuracy(x_train, y_train)
+            val_acc = self.compute_accuracy(x_val, y_val)
+            self.train_accuracies.append(train_acc)
+            self.val_accuracies.append(val_acc)
+
+            # print epoch progress
+            self._print_learning_progress(start_time, epoch, x_train, y_train, x_val, y_val)
+
+            

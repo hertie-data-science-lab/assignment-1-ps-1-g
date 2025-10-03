@@ -24,25 +24,31 @@ class ResNetwork(Network):
         The method should return the output of the network.
         '''
         params = self.params
-        
+        X = np.asarray(x_train, dtype=float)
+
+        # Ensure 2D shape (batch, features)
+        if X.ndim == 1:
+            X = X.reshape(1, -1)
+
         # Layer 1
-        z1 = np.dot(params['W1'], x_train.T)
+        z1 = X @ params['W1'].T          
         a1 = self.activation_func(z1)
-        
-        # Layer 2 with residual connection
-        z2 = np.dot(params['W2'], a1)
-        a2 = self.activation_func(z2) + a1   # residual skip
-        
-        # Output layer
-        z3 = np.dot(params['W3'], a2)
-        a3 = self.output_func(z3)
 
-        output = {"x":x_train,
-                  "z1": z1, "a1": a1,
-                  "z2": z2, "a2": a2,
-                  "z3": z3, "a3": a3}
-        return a3, output
+        # Layer 2 with residual skip
+        z2 = a1 @ params['W2'].T         
+        a2 = self.activation_func(z2) + a1  # add skip
 
+        # Output
+        z3 = a2 @ params['W3'].T
+        z3 -= np.max(z3, axis=1, keepdims=True)  # stability
+        a3 = self.output_func(z3.T).T
+
+        # store cache for backprop
+        self.cache = {"X": X, "z1": z1, "a1": a1,
+                     "z2": z2, "a2": a2,
+                     "z3": z3, "a3": a3}
+
+        return a3
 
 
     def _backward_pass(self, y_train, output):
@@ -52,29 +58,28 @@ class ResNetwork(Network):
         The method should also account for the residual connection in the hidden layer.
 
         '''
-        params=self.params
+        params = self.params
+        X, a1, a2 = self.cache["X"], self.cache["a1"], self.cache["a2"]
+        z1, z2, a3 = self.cache["z1"], self.cache["z2"], self.cache["a3"]
 
-        x_train=output["x"]
-        a1, a2, a3=output["a1"], output["a2"], output["a3"]
-        z1, z2 = output["z1"], output["z2"]
+        m = y_train.shape[0]
+        Y = np.asarray(y_train, dtype=float)
+        if Y.ndim == 1:
+            Y = Y.reshape(1, -1)
 
-        #Output error
-        #for softmax + MSE: delta - (prediction - target)
-        dz3 = (a3 - y_train.T) # shape (K, m)
-        dW3 = (1/m) * np.dot(dz3, a2.T)
+        # Output error
+        dz3 = (a3 - Y) / m                
+        dW3 = dz3.T @ a2                 
 
         # Hidden layer 2
-        da2 = np.dot(params['W3'].T, dz3) # gradient wrt a2
-        dz2 = da2 * self.activation_func_deriv(z2)  # backprop through ReLU
-        dW2 = (1/m) * np.dot(dz2, a1.T)
+        da2 = dz3 @ params['W3']          
+        dz2 = da2 * self.activation_func_deriv(z2)
+        dW2 = dz2.T @ a1                 
 
-        # Hidden layer 1 
-        da1 = np.dot(params['W2'].T, dz2) + da2
+        # Hidden layer 1 (two paths: normal + skip)
+        da1 = dz2 @ params['W2'] + da2    
         dz1 = da1 * self.activation_func_deriv(z1)
-        dW1 = (1/m) * np.dot(dz1, x_train)
-        
-        grads = {"dW1": dW1, "dW2": dW2, "dW3": dW3}
-        return grads
+        dW1 = dz1.T @ X                  
 
-
+        return {"dW1": dW1, "dW2": dW2, "dW3": dW3}
 

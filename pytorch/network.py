@@ -24,6 +24,9 @@ class TorchNetwork(nn.Module):
         self.loss_func = nn.BCEWithLogitsLoss()
         self.optimizer = optim.SGD(self.parameters(), lr=learning_rate)
 
+        self.train_accuracies = []
+        self.val_accuracies = []
+
 
 
     def _forward_pass(self, x_train):
@@ -35,10 +38,9 @@ class TorchNetwork(nn.Module):
         '''
         h1 = self.activation_func(self.linear1(x_train))
         h2 = self.activation_func(self.linear2(h1))
-        out_logit = self.linear3(h2)
-        prob = self.output_func(out_logit, dim = 1)
+        logits = self.linear3(h2)
 
-        return prob
+        return logits
 
 
 
@@ -81,35 +83,46 @@ class TorchNetwork(nn.Module):
 
         The method should return the index of the most likeliest output class.
         '''
+        self.eval()
         x = self._flatten(x)
         with torch.no_grad():
-            probs = self._forward_pass(x)
+            logits = self._forward_pass(x)
+            probs = torch.softmax(logits, dim=1)   # use softmax for multiclass
         return torch.argmax(probs, dim=1)
 
 
     def fit(self, train_loader, val_loader):
         start_time = time.time()
 
-        for iteration in range(self.epochs):
+        for epoch in range(self.epochs):
             for x, y in train_loader:
-                x = self._flatten(x)
-                y = nn.functional.one_hot(y, 10)
+                x = x.view(x.size(0), -1)
+
+                logits = self._forward_pass(x)
+                y = nn.functional.one_hot(y, num_classes=10).float()  # convert to one-hot
+                loss = self.loss_func(logits, y)
+
                 self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
 
+            train_acc = self.compute_accuracy(train_loader)
+            val_acc = self.compute_accuracy(val_loader)
 
-                output = self._forward_pass(x)
-                self._backward_pass(y, output)
-                self._update_weights()
+            # store accuracies
+            self.train_accuracies.append(train_acc)
+            self.val_accuracies.append(val_acc)
 
-            self._print_learning_progress(start_time, iteration, train_loader, val_loader)
-
-
+            self._print_learning_progress(start_time, epoch, train_loader, val_loader)
 
 
     def compute_accuracy(self, data_loader):
-        correct = 0
-        for x, y in data_loader:
-            pred = self.predict(x)
-            correct += torch.sum(torch.eq(pred, y))
+        self.eval()
+        correct, total = 0,0
+        with torch.no_grad():
+            for x, y in data_loader:
+                preds = self.predict(x)
+                correct += (preds == y).sum().item()
+                total += y.size(0)
 
-        return correct / len(data_loader.dataset)
+        return correct / total
