@@ -30,22 +30,33 @@ class TorchNetwork(nn.Module):
         '''
         TODO: Implement the forward propagation algorithm.
         The method should return the output of the network.
+
+        Froward propagation: input, hidden1 sigmoid, hidden2 sigmoid, output softmax
         '''
-        pass
+        h1 = self.activation_func(self.linear1(x_train))
+        h2 = self.activation_func(self.linear2(h1))
+        out_logit = self.linear3(h2)
+        prob = self.output_func(out_logit, dim = 1)
+
+        return prob
+
 
 
     def _backward_pass(self, y_train, output):
         '''
         TODO: Implement the backpropagation algorithm responsible for updating the weights of the neural network.
         '''
-        pass
+        y_train = y_train.float() #make sure labels are float for MSE
+        loss = self.loss_func(output, y_train)
+        loss.backward()
+        return loss.item()
 
 
     def _update_weights(self):
         '''
         TODO: Update the network weights according to stochastic gradient descent.
         '''
-        pass
+        self.optimizer.step()
 
 
     def _flatten(self, x):
@@ -70,7 +81,10 @@ class TorchNetwork(nn.Module):
 
         The method should return the index of the most likeliest output class.
         '''
-        pass
+        x = self._flatten(x)
+        with torch.no_grad():
+            probs = self._forward_pass(x)
+        return torch.argmax(probs, dim=1)
 
 
     def fit(self, train_loader, val_loader):
