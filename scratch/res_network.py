@@ -54,27 +54,24 @@ class ResNetwork(Network):
         '''
         m=y_train.shape[0]
         params=self.params
-        output=output
 
         x_train=output["x"]
         a1, a2, a3=output["a1"], output["a2"], output["a3"]
-        z1, z2, z3 = output["z1"], output["z2"], output["z3"]
+        z1, z2 = output["z1"], output["z2"]
 
         #Output error
-        dz3 = (a3 - y_train.T) * self.output_func_deriv(z3)
+        #for softmax + MSE: delta - (prediction - target)
+        dz3 = (a3 - y_train.T) # shape (K, m)
         dW3 = (1/m) * np.dot(dz3, a2.T)
 
         # Hidden layer 2
-        dz2 = np.dot(params['W3'].T, dz3) * self.activation_func_deriv(z2)
+        da2 = np.dot(params['W3'].T, dz3) # gradient wrt a2
+        dz2 = da2 * self.activation_func_deriv(z2)  # backprop through ReLU
         dW2 = (1/m) * np.dot(dz2, a1.T)
 
         # Hidden layer 1 
-        # normal path: through W2
-        dh1_from_W2 = np.dot(params['W2'].T, dz2)
-        dh1_residual = np.dot(params['W3'].T, dz3)
-        dh1_total = dh1_from_W2 + dh1_residual
-
-        dz1 = dh1_total * self.activation_func_deriv(z1)
+        da1 = np.dot(params['W2'].T, dz2) + da2
+        dz1 = da1 * self.activation_func_deriv(z1)
         dW1 = (1/m) * np.dot(dz1, x_train)
         
         grads = {"dW1": dW1, "dW2": dW2, "dW3": dW3}

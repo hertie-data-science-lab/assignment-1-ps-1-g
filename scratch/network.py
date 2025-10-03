@@ -48,16 +48,16 @@ class Network():
         params=self.params
 
         # Layer 1
-        z1=np.dot(params['W1'], x_train.T)
+        z1=np.dot(params['W1'], x_train.T) # (H1, m)
         a1=self.activation_func(z1)
 
         # Layer 2
-        z2=np.dot(params['W2'], a1)
+        z2=np.dot(params['W2'], a1) # (H2, m)
         a2=self.activation_func(z2)
 
         #Layer 3
-        z3=np.dot(params['W3'], a2)
-        a3=self.output_func(z3)
+        z3=np.dot(params['W3'], a2) # (K, m)
+        a3=self.output_func(z3) # softmax across classes
 
         #Final output
         output={"x":x_train,
@@ -77,12 +77,12 @@ class Network():
         m=y_train.shape[0]
         params=self.params
 
-        x_train=output["x"]
+        x_train=output["x"] # (m, d)
         a1,a2,a3=output["a1"], output["a2"], output["a3"]
-        z1,z2,z3= output["z1"], output["z2"], output["z3"]
+        z1,z2= output["z1"], output["z2"]
 
         #Output layer
-        dz3=(a3-y_train.T)*self.output_func_deriv(z3)
+        dz3=(a3-y_train.T)
         dW3=(1/m)*np.dot(dz3,a2.T)
 
         #Hidden Layer 2
@@ -151,7 +151,7 @@ class Network():
                                                      min_lr=0)
                 else: 
                     learning_rate = self.learning_rate
-                output = self._forward_pass(x)
+                a3, output = self._forward_pass(x)
                 weights_gradient = self._backward_pass(y, output)
                 
                 self._update_weights(weights_gradient, learning_rate=learning_rate)
