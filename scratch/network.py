@@ -79,10 +79,10 @@ class Network():
 
         x_train=output["x"]
         a1,a2,a3=output["a1"], output["a2"], output["a3"]
-        z1,z2,z3= output["z1"], output["z2"], output["z3"]
+        z1,z2= output["z1"], output["z2"]
 
         #Output layer
-        dz3=(a3-y_train.T)*self.output_func_deriv(z3)
+        dz3=(a3-y_train.T)
         dW3=(1/m)*np.dot(dz3,a2.T)
 
         #Hidden Layer 2
@@ -95,7 +95,6 @@ class Network():
         
         weights_gradient = {"dW1": dW1, "dW2": dW2, "dW3": dW3}
         return weights_gradient
-
 
     def _update_weights(self, weights_gradient, learning_rate):
         '''
